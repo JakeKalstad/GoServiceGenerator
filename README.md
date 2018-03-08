@@ -10,6 +10,4 @@ I realized that half of my services are more or less CRUD services with little t
 
 > I NEED A WAY TO PERSIST AND SNAGGLE SOME DATA || CRUD SERVICE THAT IS FULLY FUXWITHABLE
 
->(events via deeeez nats)
->redis crap to r.set("deal" "with" "that" "joy");
->graphing data layer ability
+
