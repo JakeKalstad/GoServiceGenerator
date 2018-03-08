@@ -1,0 +1,194 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+  "{{.URL}}/{{.Name}}/data"
+  
+	_ "github.com/lib/pq"
+	"github.com/nats-io/go-nats"
+)
+
+type AppError struct {
+  error
+  Action string
+  Data   string
+}
+
+type EventMessage struct {
+  Status    string
+  DataType  string
+  Data      interface{}
+}
+
+type response struct {
+	Message string `json:"message"`
+}
+
+func initializeNats() (*nats.EncodedConn, error) {
+	nc, err := nats.Connect(nats.DefaultURL)
+	if err != nil {
+		return nil, err
+	}
+	c, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func contextualize(timeout time.Duration) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer func() {
+				cancel()
+				if ctx.Err() == context.DeadlineExceeded {
+					w.WriteHeader(http.StatusGatewayTimeout)
+				}
+			}()
+			r = r.WithContext(ctx)
+			next.ServeHTTP(w, r)
+		}
+		return http.HandlerFunc(fn)
+	}
+}
+
+type chanRet struct {
+	result []byte
+	err    error
+  status int
+}
+
+func (app *application) runner(w http.ResponseWriter, r *http.Request, task func() *chanRet) {
+	fin := make(chan *chanRet, 1)
+	go func() {
+		fin <- task()
+	}()
+	select {
+	case <-r.Context().Done():
+    close(fin)
+		return
+	case res := <-fin:
+		if res.err != nil {
+			fmt.Fprint(os.Stderr, res.err)
+      app.Publish("error", res.err)
+		} 
+		w.WriteHeader(res.status)
+		w.Write(res.result)
+	}
+}
+
+type application struct {
+	db *db.DB
+	events *nats.EncodedConn
+}
+
+func (a *application) Publish(action string, v interface{}) {
+	subject := strings.ToLower("{{.Name}}.") + action + "." + strconv.Itoa(int(time.Now().Unix()))
+  a.events.Flush()
+	a.events.Publish(subject, v) 
+}
+
+func execByVerb(r *http.Request, post func(body []byte) ([]byte, error), get func(key string) ([]byte, error), delete func(key string) error) *chanRet {
+	var result []byte
+	var err error
+	switch r.Method {
+	case http.MethodGet:
+		key := r.URL.Query().Get("key")
+		result, err = get(key)
+	case http.MethodPut:
+	case http.MethodPost:
+		defer r.Body.Close()
+		body, bodyReadErr := ioutil.ReadAll(r.Body)
+		if bodyReadErr != nil {
+			err = bodyReadErr
+		} else {
+		  result, err = post(body)
+    }
+  case http.MethodDelete:
+		key := r.URL.Query().Get("key")
+	  err = delete(key)
+    result = []byte{'o', 'k'}
+	}
+  status := http.StatusOK
+  if err != nil {
+    status = http.StatusInternalServerError
+  } else if err == nil && result == nil {
+    status = http.StatusNotFound
+  }
+	return &chanRet{result, err, status}
+}
+
+func (app *application) root(w http.ResponseWriter, r *http.Request) {
+	app.runner(w, r, func() *chanRet {
+		return execByVerb(r,
+			func(body []byte) ([]byte, error) {
+				return nil, nil
+			},
+			func(key string) ([]byte, error) {
+				return json.Marshal(&response{Message: "{{.Name}}"})
+			},
+			func(key string) error {
+				return nil
+			})
+	})
+}
+
+{{.GetRoutes}}
+
+func main() {
+	newDb, err := db.NewDB()
+	if err != nil {
+		panic(err)
+	}
+	nEvents, err := initializeNats()
+	if err != nil {
+		panic(err)
+	}
+	app := &application{
+		db:     newDb,
+		events: nEvents,
+	}
+	mux := http.NewServeMux()
+
+	mux.Handle("/", contextualize(time.Second*1)(http.HandlerFunc(app.root)))
+  {{.MuxHandlers}}
+	server := &http.Server{
+		Addr: fmt.Sprintf(
+			"%s:%d",
+			"0.0.0.0",
+			9111,
+		),
+		Handler: mux,
+	}
+	serverStartup := make(chan error, 1)
+
+	go func() {
+		serverStartup <- server.ListenAndServe()
+	}()
+	osSignals := make(chan os.Signal, 1)
+	signal.Notify(
+		osSignals,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGKILL,
+		syscall.SIGQUIT,
+	)
+	select {
+	case sig := <-osSignals:
+		fmt.Printf(sig.String())
+	case err := <-serverStartup:
+		fmt.Printf(err.Error())
+	}
+	fmt.Printf("\n\nADIOS! TOT ZIENS! HASTA LUEGO!\n")
+}

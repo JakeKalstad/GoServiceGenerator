@@ -1,0 +1,97 @@
+{
+	"name":"LaFamiglia",
+  "url": "lafamiglia.com/jakekalstad",
+  "email": "jake@jakemail.net",
+  "ms_timeout": 1000,
+  "data": [{
+    "name": "UserInfo",
+    "columns": [
+      {"name": "UserName",  "type": "TEXT", "null": false},
+      {"name": "Password",    "type": "TEXT", "null": false},
+      {"name": "Email",       "type": "TEXT", "null": false}
+    ],
+    "routing": {
+      "by_login": "Password"
+    } 
+  },
+  {
+    "name": "Character",
+    "columns": [
+      {"name": "UserUUID", "type": "UUID", "null": false},
+      {"name": "Name",    "type": "TEXT", "null": false},
+      {"name": "Health", "type": "INTEGER", "null": false},
+      {"name": "Level", "type": "INTEGER", "null": false},
+      {"name": "Actions", "type": "INTEGER", "null": false},
+      {"name": "Money", "type": "INTEGER", "null": false},
+      {"name": "Notoriety", "type": "INTEGER", "null": false},
+      {"name": "Experience", "type": "INTEGER", "null": false},
+      {"name": "Stamina", "type": "INTEGER", "null": false},
+      {"name": "Luck", "type": "INTEGER", "null": false},
+      {"name": "Strength", "type": "INTEGER", "null": false}
+    ],
+    "routing": {
+      "by_user": "UserUUID"
+    }
+  },
+  {
+    "name": "Skills",
+    "columns": [
+      {"name": "CharacterUUID", "type": "UUID", "null": false},
+      {"name": "Theft", "type": "INTEGER", "null": false},
+      {"name": "TheftXp", "type": "INTEGER", "null": false},
+      {"name": "Assault", "type": "INTEGER", "null": false},
+      {"name": "AssaultXp", "type": "INTEGER", "null": false},
+      {"name": "Fraud", "type": "INTEGER", "null": false},
+      {"name": "FraudXp", "type": "INTEGER", "null": false},
+      {"name": "Murder", "type": "INTEGER", "null": false},
+      {"name": "MurderXp", "type": "INTEGER", "null": false},
+      {"name": "Tech", "type": "INTEGER", "null": false},
+      {"name": "TechXp", "type": "INTEGER", "null": false}
+    ],
+    "routing": {
+      "by_character": "CharacterUUID"
+    }
+  },
+  {
+    "name": "Items",
+    "columns": [
+      {"name": "CharacterUUID", "type": "UUID", "null": false},
+      {"name": "Name", "type": "TEXT", "null": false},
+      {"name": "Description", "type": "TEXT", "null": false},
+      {"name": "Worth", "type": "INTEGER", "null": false},
+      {"name": "Theft", "type": "INTEGER", "null": false},
+      {"name": "Assault", "type": "INTEGER", "null": false},
+      {"name": "Fraud", "type": "INTEGER", "null": false},
+      {"name": "Murder", "type": "INTEGER", "null": false},
+      {"name": "Tech", "type": "INTEGER", "null": false},
+      {"name": "Charisma", "type": "INTEGER", "null": false},
+      {"name": "Stamina", "type": "INTEGER", "null": false},
+      {"name": "Strength", "type": "INTEGER", "null": false}
+    ], 
+    "routing": {
+      "by_character": "CharacterUUID"
+    }
+  },
+  {
+    "name": "Job",
+    "columns": [
+      {"name": "Name", "type": "TEXT", "null": false},
+      {"name": "Description", "type": "TEXT", "null": false},
+      {"name": "PayOut", "type": "INTEGER", "null": false},
+      {"name": "MinLevel", "type": "INTEGER", "null": false},
+      {"name": "MinWager", "type": "INTEGER", "null": false}
+    ]
+  },
+  {
+    "name": "Contract",
+    "columns": [
+      {"name": "CharacterUUID", "type": "UUID", "null": false},
+      {"name": "JobUUID", "type": "UUID", "null": false},
+      {"name": "Wager", "type": "INTEGER", "null": false}
+    ], 
+    "routing": {
+      "by_character": "CharacterUUID",
+      "by_job": "JobUUID"
+    }
+  }]
+}

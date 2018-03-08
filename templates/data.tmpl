@@ -1,0 +1,99 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+  
+	"strconv"
+	"time"
+  "github.com/fgrid/uuid" // replace when go is go-ing to give me sha5 uuids
+)
+
+const scaffold = `{{ range $value := .Data }}{{ $value.GetCreate }}{{ end }}
+`
+
+type DB struct {
+	*sql.DB
+}
+
+func NewDB() (*DB, error) {
+	db, err := sql.Open("postgres", fmt.Sprintf("host=%s dbname=%s sslmode=disable user=%s password=%s", os.Getenv("DB_HOST"), os.Getenv("DB_NAME"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD")))
+	if err != nil {
+		return nil, err
+	}
+	if err = db.Ping(); err != nil {
+		return nil, err
+	}
+	retDb := &DB{db}
+	return retDb, retDb.scaffold()
+}
+
+func (db *DB) scaffold() error {
+	_, err := db.Exec(scaffold)
+	return err
+}
+
+type Point struct {
+	X string `json:"x"`
+	Y string `json:"y"`
+}
+
+{{ range $value := .Data }}
+{{ $value.GetGoStruct }}
+const insert{{ $value.Name }} = `
+  {{ $value.GetInsert }}
+`
+func (db *DB) Insert{{$value.Name}}(data *{{$value.Name}}) error {
+  if len(data.UUID) == 0 {
+	  data.UUID = uuid.NewV5(uuid.NewNamespaceUUID("{{.Name}}"), []byte( {{.UniqueID}} )).String()
+  }
+  {{$value.CleanData}}
+	_, err := db.Exec(insert{{$value.Name}},data.UUID{{$value.GetGoParams}})
+	return err
+}
+
+const delete{{$value.Name}} = `UPDATE {{$value.GetName}} SET deleted=now() WHERE uuid = $1`
+func (db *DB) Delete{{$value.Name}}(uuid string) error {
+  _, err := db.Query(delete{{$value.Name}}, uuid)
+  return err
+}
+
+const get{{$value.Name}} = `SELECT {{$value.GetSelectParams}} FROM {{$value.GetName}} WHERE uuid = $1 AND deleted IS NULL`
+const get{{$value.Name}}s = `SELECT {{$value.GetSelectParams}} FROM {{$value.GetName}} WHERE deleted IS NULL`
+func (db *DB) Get{{$value.Name}}(uuid string) ([]*{{$value.Name}}, error) {
+	var rows *sql.Rows
+	var err error
+	if len(uuid) != 0 {
+		rows, err = db.Query(get{{$value.Name}}, uuid)
+	} else {
+		rows, err = db.Query(get{{$value.Name}}s)
+	}
+	if err != nil {
+		return nil, err
+	}
+	records := []*{{$value.Name}}{}
+	for rows.Next() {
+		data := &{{$value.Name}}{}
+		rows.Scan(&data.UUID{{.GetGoRefParams}})
+		records = append(records, data)
+	}
+	return records, nil
+}
+{{ range $key, $val := .Routing }}
+const get{{$value.Name}}sBy{{$val}} = `SELECT {{$value.GetSelectParams}} FROM {{$value.GetName}} WHERE deleted IS NULL AND {{$.Underscore $val}} = $1`
+func (db *DB) Get{{$value.Name}}By{{$val}}(uuid string) ([]*{{$value.Name}}, error) {
+	rows, err := db.Query(get{{$value.Name}}sBy{{$val}}, uuid)
+	if err != nil {
+		return nil, err
+	}
+	records := []*{{$value.Name}}{}
+	for rows.Next() {
+		data := &{{$value.Name}}{}
+		rows.Scan(&data.UUID{{$value.GetGoRefParams}})
+		records = append(records, data)
+	}
+	return records, nil
+}
+{{ end }}
+{{ end }}
